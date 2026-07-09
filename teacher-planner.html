@@ -1395,10 +1395,13 @@ async function handlePlanFileUpload(e, list){
     }
     showPlanPreview(lines, subj, list);
   }catch(err){
-    console.error(err);
-    if(err.message === 'doc-unsupported') showToast('Старий формат .doc не підтримується — збережіть файл як .docx і спробуйте ще раз');
-    else if(err.message === 'unsupported-format') showToast('Формат файлу не підтримується');
-    else showToast('Не вдалося обробити файл');
+    console.error('Помилка завантаження файлу плану:', err);
+    const msg = err && err.message ? err.message : String(err);
+    if(msg === 'doc-unsupported') showToast('Старий формат .doc не підтримується — збережіть файл як .docx і спробуйте ще раз');
+    else if(msg === 'unsupported-format') showToast('Формат файлу не підтримується. Дозволені: .pdf, .docx, .txt, .csv');
+    else if(msg === 'mammoth-missing') showToast('Не вдалося завантажити модуль читання Word-файлів (перевірте інтернет-з\'єднання й спробуйте ще раз)');
+    else if(msg === 'pdfjs-missing') showToast('Не вдалося завантажити модуль читання PDF (перевірте інтернет-з\'єднання й спробуйте ще раз)');
+    else showToast(`Не вдалося обробити файл: ${msg}`);
   }
   inp.value = '';
 }
@@ -1421,6 +1424,7 @@ async function handleTextbookUpload(e, list){
     const sizeSteps = [350000, 200000, 100000, 50000];
     let saved = false;
     let usedChars = 0;
+    let lastStorageErr = null;
     for(const cap of sizeSteps){
       const chunk = rawText.slice(0, cap);
       let stepOk = false;
@@ -1429,6 +1433,7 @@ async function handleTextbookUpload(e, list){
           await AppStorage.set(textbookKey(subj), chunk, false);
           stepOk = true;
         }catch(storageErr){
+          lastStorageErr = storageErr;
           console.error(`Не вдалося зберегти підручник (обсяг ${cap}, спроба ${attempt})`, storageErr);
           if(attempt < 2) await new Promise(r=>setTimeout(r, 1000));
         }
@@ -1441,7 +1446,8 @@ async function handleTextbookUpload(e, list){
     }
 
     if(!saved){
-      showToast('Не вдалося зберегти підручник — файл або з\'єднання зараз нестабільні. Спробуйте ще раз за хвилину або з меншим файлом.');
+      const detail = lastStorageErr && lastStorageErr.message ? lastStorageErr.message : 'невідома помилка';
+      showToast(`Не вдалося зберегти підручник (${detail}). Спробуйте ще раз за хвилину або з меншим файлом.`);
       inp.value = ''; return;
     }
 
@@ -1452,10 +1458,13 @@ async function handleTextbookUpload(e, list){
       : 'Підручник завантажено і готовий до використання в розробках уроків');
     renderSubjectsList(getSubjectsInSchedule());
   }catch(err){
-    console.error(err);
-    if(err.message === 'doc-unsupported') showToast('Старий формат .doc не підтримується — збережіть файл як .docx і спробуйте ще раз');
-    else if(err.message === 'unsupported-format') showToast('Формат файлу не підтримується');
-    else showToast('Не вдалося обробити підручник — файл може бути занадто великим');
+    console.error('Помилка завантаження підручника:', err);
+    const msg = err && err.message ? err.message : String(err);
+    if(msg === 'doc-unsupported') showToast('Старий формат .doc не підтримується — збережіть файл як .docx і спробуйте ще раз');
+    else if(msg === 'unsupported-format') showToast('Формат файлу не підтримується. Дозволені: .pdf, .docx, .txt');
+    else if(msg === 'mammoth-missing') showToast('Не вдалося завантажити модуль читання Word-файлів (перевірте інтернет-з\'єднання й спробуйте ще раз)');
+    else if(msg === 'pdfjs-missing') showToast('Не вдалося завантажити модуль читання PDF (перевірте інтернет-з\'єднання й спробуйте ще раз)');
+    else showToast(`Не вдалося обробити підручник: ${msg}`);
   }
   inp.value = '';
 }
