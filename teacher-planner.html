@@ -434,7 +434,13 @@ const AppStorage = (function(){
       try{
         localStorage.setItem(lsKey(key, shared), value);
         resolve({ key, value, shared: !!shared });
-      }catch(e){ reject(e); }
+      }catch(e){
+        if(e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014)){
+          reject(new Error('Сховище браузера переповнене (localStorage). Спробуйте очистити кеш браузера, звільнити місце або скоротити файл.'));
+        } else {
+          reject(e);
+        }
+      }
     });
   }
   function lsDelete(key, shared){
@@ -526,7 +532,7 @@ async function writeStateWithRetry(payload, maxAttempts){
   for(let attempt=1; attempt<=maxAttempts; attempt++){
     try{
       await AppStorage.set('planner-state', payload);
-      return true;
+      return { ok: true };
     }catch(e){
       lastErr = e;
       console.error(`Спроба збереження ${attempt}/${maxAttempts} не вдалась`, e);
@@ -537,7 +543,7 @@ async function writeStateWithRetry(payload, maxAttempts){
     }
   }
   console.error('Усі спроби збереження вичерпано', lastErr);
-  return false;
+  return { ok: false, error: lastErr };
 }
 
 function saveState(){
@@ -549,10 +555,11 @@ function saveState(){
       pendingSaveResolvers = [];
       saveStateTimer = null;
       const payload = JSON.stringify(state);
-      const ok = await writeStateWithRetry(payload);
-      if(!ok && !saveStatePending){
+      const result = await writeStateWithRetry(payload);
+      if(!result.ok && !saveStatePending){
         saveStatePending = true;
-        showToast('Не вдалося зберегти зміни навіть після кількох спроб. Дані лишаються на екрані — спробуйте ще раз пізніше або не закривайте вкладку.');
+        const detail = result.error && result.error.message ? result.error.message : 'невідома помилка';
+        showToast(`Не вдалося зберегти зміни: ${detail}`);
         setTimeout(()=>{ saveStatePending = false; }, 8000);
       }
       resolvers.forEach(r=>r());
@@ -1421,7 +1428,7 @@ async function handleTextbookUpload(e, list){
     }
 
     // зберігаємо з поступовим зменшенням обсягу, якщо сховище відмовляє через розмір
-    const sizeSteps = [350000, 200000, 100000, 50000];
+    const sizeSteps = AppStorage.isNative ? [350000, 200000, 100000, 50000] : [150000, 80000, 40000, 20000, 8000];
     let saved = false;
     let usedChars = 0;
     let lastStorageErr = null;
